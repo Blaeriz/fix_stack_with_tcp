@@ -1,0 +1,62 @@
+\documentclass[twocolumn,10pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{geometry}
+\geometry{letterpaper, margin=0.75in}
+\usepackage{cite}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{xcolor}
+
+\title{A Layered Security Architecture for the FIX Protocol: \\ Integrating TLS 1.3 and AES-256-GCM}
+\author{Gemini CLI Stack Implementation Report \\ College of Engineering and Technology}
+\date{April 14, 2026}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+The Financial Information eXchange (FIX) protocol is the industry standard for real-time electronic communication in financial markets. While natively unencrypted, modern trading environments require robust security. This paper describes a modular C++ implementation of a FIX stack that employs a dual-layer security approach: transport-level encryption via TLS 1.3 and application-level payload encryption using AES-256-GCM. We demonstrate a functional round-trip between a simulator and an exchange, ensuring data integrity and confidentiality.
+\end{abstract}
+
+\section{Introduction}
+The FIX protocol \cite{fix42} defines a series of messaging semantics for trade-related communication. Historically, FIX sessions relied on private leased lines for security. However, with the shift toward cloud-based trading and public internet transit, application-layer and transport-layer security have become mandatory. This project implements a minimal but complete FIX stack (version 4.2) in C++ to explore these security paradigms.
+
+\section{System Architecture}
+The system is divided into five distinct layers to ensure separation of concerns:
+\begin{enumerate}
+    \item \textbf{FIX Engine:} Manages session state, sequence numbers, and heartbeats.
+    \item \textbf{Codec:} Performs serialization and parsing of FIX tag-value pairs.
+    \item \textbf{Security Layer:} Handles optional AES-256-GCM payload encryption.
+    \item \textbf{Transport:} Manages TCP sockets wrapped in TLS 1.3.
+    \item \textbf{Exchange Simulator:} A basic matching logic to process orders.
+\end{enumerate}
+
+\section{Security Implementation}
+
+\subsection{Transport Layer Security (TLS)}
+The stack utilizes TLS 1.3 \cite{rfc8446} to provide a secure tunnel for all communication. This is implemented using the OpenSSL library \cite{openssl}. The server employs a self-signed RSA-4096 certificate. TLS ensures that the entire FIX stream is invisible to network sniffers and protects against man-in-the-middle attacks.
+
+\subsection{AES-256-GCM Payload Encryption}
+In addition to TLS, we implemented an application-level encryption layer using AES in Galois/Counter Mode (GCM) \cite{nist80038d}. GCM was selected because it provides both confidentiality and data authentication (AEAD). 
+
+The encryption framing prepends a 12-byte random nonce to the ciphertext. The FIX body (excluding tags 8, 9, and 10) is encrypted, and the \texttt{BodyLength} (tag 9) and \texttt{CheckSum} (tag 10) are updated to reflect the encrypted payload size and content. This ensures that even if TLS is terminated at a proxy, the sensitive order data remain encrypted until they reach the final engine.
+
+\section{Validation and Results}
+The implementation was verified using a Python-based simulator (\texttt{simplefix}). A full round-trip flow was observed:
+\begin{enumerate}
+    \item \textbf{Logon (35=A):} Successful handshake and TLS termination.
+    \item \textbf{Order (35=D):} Execution of a \texttt{NewOrderSingle} with randomized symbols.
+    \item \textbf{Report (35=8):} Reception of an \texttt{ExecutionReport} indicating a filled order.
+    \item \textbf{Logout (35=5):} Graceful session termination.
+\end{enumerate}
+Integrity was maintained throughout; any tampering with the AES auth tag or the FIX checksum resulted in an immediate session reject.
+
+\section{Conclusion}
+The integration of TLS and AES-256-GCM provides a defense-in-depth strategy for financial messaging. While TLS secures the pipe, AES-GCM secures the data itself, ensuring that even in complex multi-hop routing environments, the financial instructions remain confidential and authentic.
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}
